@@ -218,16 +218,16 @@
     EOD.state = normalizeState(stored || seedState());
     if (!EOD.state.accounts.length) {
       EOD.state.accounts = [
-        {
-          id: 'acct-leo',
-          username: 'Leo',
-          password: 'LeoPhotobooth',
-          displayName: 'Leo',
-          role: 'Workspace Access',
-          team: 'Photobooth-io',
-          createdAt: new Date().toISOString()
-        }
-      ];
+          {
+            id: 'acct-user',
+            username: 'User',
+            password: 'UserPhotobooth',
+            displayName: 'User',
+            role: 'Workspace Access',
+            team: 'Photobooth-io',
+            createdAt: new Date().toISOString()
+          }
+        ];
       EOD.saveState('accounts-seeded');
     }
     setupSync();
