@@ -1,3 +1,19 @@
+/* Ensure select controls and their option text are visible in dark theme */
+select, .field select {
+	background: var(--panel) !important;
+	color: var(--text) !important;
+	border: 1px solid var(--border) !important;
+	padding: 8px 10px;
+	border-radius: 8px;
+}
+
+select option {
+	background: var(--panel);
+	color: var(--text);
+}
+
+/* Hide default IE/Edge expand caret when styling select */
+select::-ms-expand { display: none; }
 .topbar__button, .icon-button { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--panel); border: 1px solid var(--border); box-shadow: none; transition: transform 180ms var(--ease), background 180ms var(--ease), border-color 180ms var(--ease); }
 .topbar__button:hover, .icon-button:hover { transform: translateY(-1px); border-color: rgba(240, 191, 210, 0.28); background: rgba(255, 255, 255, 0.05); }
 .sidebar__brand { display: flex; align-items: center; gap: 12px; }
