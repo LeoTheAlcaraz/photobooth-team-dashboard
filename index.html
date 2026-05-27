@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta name="color-scheme" content="dark light">
+	<meta name="theme-color" content="#0b1220">
+	<title>Photobooth-io Development Feed</title>
+	<link rel="manifest" href="manifest.json">
+	<link rel="stylesheet" href="assets/css/variables.css">
+	<link rel="stylesheet" href="assets/css/global.css">
+	<link rel="stylesheet" href="assets/css/layout.css">
+	<link rel="stylesheet" href="assets/css/utilities.css">
+	<link rel="stylesheet" href="assets/css/pages/login.css">
+	<link rel="stylesheet" href="assets/css/components.css">
+	<link rel="stylesheet" href="assets/css/responsive.css">
+</head>
+<body data-page="auth">
+	<main class="auth-shell">
+		<section class="auth-hero">
+			<div class="auth-hero__content">
+				<div class="auth-brand">
+					<strong>Development Feed</strong>
+				</div>
+				<h1>Photobooth-io Team Workspace</h1>
+				<p>Workspace access for reports, issues, and daily updates.</p>
+			</div>
+		</section>
+
+		<section class="auth-panel">
+			<div class="auth-card">
+				<div class="section-label">Secure access</div>
+				<div>
+					<h2>Sign in to continue.</h2>
+					<p>Use your company credentials to open the workspace.</p>
+				</div>
+
+				<form class="auth-form" data-auth-form>
+					<label class="field">
+						<span>Username</span>
+						<input name="username" autocomplete="username" placeholder="Leo" required>
+					</label>
+
+					<label class="field">
+						<span>Password</span>
+						<input name="password" type="password" autocomplete="current-password" placeholder="••••••••••••" required>
+					</label>
+
+					<label class="auth-remember">
+						<input type="checkbox" name="remember" checked>
+						<span>Keep me signed in on this device</span>
+					</label>
+
+					<div class="auth-error" data-auth-error aria-live="polite"></div>
+
+					<div class="button-row">
+						<button class="button-primary" type="submit">Sign in</button>
+					</div>
+				</form>
+			</div>
+		</section>
+	</main>
+
+	<!-- Firebase SDK (compat) + initializer -->
+	<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+	<script src="assets/js/firebase-init.js"></script>
+	<script src="assets/js/create-users.js"></script>
+
+	<script src="assets/js/storage.js"></script>
+	<script src="assets/js/ui.js"></script>
+	<script src="assets/js/notifications.js"></script>
+	<script src="assets/js/auth.js"></script>
+</body>
+</html>

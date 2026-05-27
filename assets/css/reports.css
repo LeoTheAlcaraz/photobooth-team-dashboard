@@ -1,0 +1,8 @@
+.report-layout { display: grid; grid-template-columns: minmax(0, 1fr) 0.92fr; gap: var(--space-5); }
+.report-preview { position: sticky; top: calc(var(--topbar-height) + 18px); }
+.preview-body { display: grid; gap: 16px; }
+.character-count { color: var(--muted); font-size: 0.84rem; }
+.draft-strip { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 14px 16px; border-radius: 16px; border: 1px solid rgba(141, 162, 255, 0.12); background: rgba(141, 162, 255, 0.06); }
+.draft-strip > div { display: grid; gap: 6px; }
+.report-timeline { display: grid; gap: 14px; }
+.report-timeline .timeline-item { grid-template-columns: 18px minmax(0, 1fr); }

@@ -1,0 +1,18 @@
+{
+  "name": "Photobooth-io Development Feed",
+  "short_name": "Photobooth-io",
+  "start_url": "./dashboard.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0b1220",
+  "theme_color": "#0b1220",
+  "description": "Internal workspace for reports, bugs, and daily updates.",
+  "icons": [
+    {
+      "src": "assets/icons/photobooth-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

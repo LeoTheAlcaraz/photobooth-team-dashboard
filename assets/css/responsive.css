@@ -1,0 +1,24 @@
+@media (max-width: 1200px) {
+  .hero-card__grid, .split-grid, .report-layout, .bugs-layout, .dashboard-split, .auth-shell, .archive-toolbar { grid-template-columns: 1fr; }
+  .col-8, .col-7, .col-6, .col-5, .col-4, .col-3 { grid-column: span 12; }
+  .preview-panel, .report-preview { position: static; }
+}
+
+@media (max-width: 980px) {
+  .app-shell { grid-template-columns: 1fr; }
+  .sidebar { position: fixed; inset: 0 auto 0 0; width: min(var(--sidebar-width), 86vw); transform: translateX(-100%); transition: transform 220ms var(--ease); z-index: 60; }
+  .sidebar.is-open { transform: translateX(0); }
+  .topbar { padding-inline: 14px; }
+  .search-field { display: none; }
+  .app-main { width: 100%; padding: 16px; }
+  .topbar__actions .button-ghost, .topbar__actions .button-soft { padding-inline: 12px; }
+}
+
+@media (max-width: 720px) {
+  .hero-card h2, .auth-hero h1 { font-size: clamp(1.9rem, 8vw, 3rem); }
+  .auth-metrics, .activity-matrix, .archive-grid, .dashboard-grid, .mini-grid, .page-grid { grid-template-columns: 1fr; }
+  .modal { padding: 12px; }
+  .modal__panel { max-height: 96vh; }
+  .section-heading, .page-heading, .toolbar-card, .split-card { align-items: start; flex-direction: column; }
+  .button, .button-ghost, .button-soft, .button-primary, .button-danger { width: 100%; }
+}
