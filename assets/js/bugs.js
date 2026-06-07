@@ -75,6 +75,141 @@
     `;
   }
 
+  function bugSeverityOptions(severity) {
+    return ['low', 'medium', 'high', 'critical'].map((item) => `<option value="${item}" ${String(severity || 'medium') === item ? 'selected' : ''}>${item.charAt(0).toUpperCase() + item.slice(1)}</option>`).join('');
+  }
+
+  function renderAttachmentThumbs(attachments) {
+    if (!attachments || !attachments.length) {
+      return '<p class="subtle">No attachments.</p>';
+    }
+    return `<div class="thumb-grid">${attachments.map((item) => (
+      item.type && item.type.startsWith('image/')
+        ? `<img src="${item.dataUrl}" alt="${EOD.escapeHtml(item.name)}" style="max-width:100%; border-radius:12px;">`
+        : `<span class="pill">${EOD.escapeHtml(item.name)}</span>`
+    )).join('')}</div>`;
+  }
+
+  function openBugDetail(bugOrId) {
+    const bug = typeof bugOrId === 'object' ? bugOrId : EOD.getBugById(bugOrId);
+    if (!bug) {
+      EOD.notify('That bug could not be found.', 'warning', 'Bug');
+      return;
+    }
+
+    const session = EOD.getSession ? EOD.getSession() : {};
+    const sessionUser = String(session.username || session.displayName || '').toLowerCase().trim();
+    const itemOwner = String(bug.reporter || '').toLowerCase().trim();
+    const isOwner = sessionUser && (itemOwner.includes(sessionUser) || sessionUser.includes(itemOwner));
+
+    const body = EOD.createElement('div', 'stack');
+    body.innerHTML = `
+      <form class="stack" data-bug-detail-form>
+        <div class="draft-strip">
+          <div>
+            <strong>${EOD.escapeHtml(bug.reporter || 'Reporter')}</strong>
+            <div class="helper">${EOD.escapeHtml(bug.affectedUrl || 'No URL')} · ${EOD.escapeHtml(bug.role || 'Role')}</div>
+          </div>
+          <span class="pill">${EOD.formatDate(bug.createdAt)}</span>
+        </div>
+
+        <div class="mini-grid">
+          <label class="field"><span>Severity</span><select name="severity">${bugSeverityOptions(bug.severity)}</select></label>
+          <label class="field"><span>Browser</span>${isOwner ? `<input name="browser" value="${EOD.escapeHtml(bug.browser || '')}">` : `<p style="margin:0;">${EOD.escapeHtml(bug.browser || '—')}</p>`}</label>
+        </div>
+
+        <div class="preview-body report-preview-content">
+          <div class="preview-header-card">
+            <div class="preview-header-card__meta">
+              <span class="severity-pill is-${String(bug.severity || 'medium').toLowerCase()}">${EOD.escapeHtml(bug.severity || 'medium')}</span>
+              <span class="role-pill">${EOD.escapeHtml(bug.role || 'Role')}</span>
+            </div>
+            ${isOwner ? `<input name="title" value="${EOD.escapeHtml(bug.title || '')}" style="margin-top:8px; font-size:1.15rem; font-weight:600; width:100%;">` : `<h3>${EOD.escapeHtml(bug.title || 'Bug')}</h3>`}
+            <p>${EOD.escapeHtml(bug.reporter || 'Reporter')} · ${EOD.escapeHtml(bug.affectedUrl || 'No URL')}</p>
+          </div>
+
+          <div class="preview-section-grid">
+            <section class="preview-section preview-section--wide">
+              <span class="preview-section__label">Affected URL</span>
+              ${isOwner ? `<input name="affectedUrl" value="${EOD.escapeHtml(bug.affectedUrl || '')}" style="margin-top:8px;">` : `<p>${EOD.escapeHtml(bug.affectedUrl || 'None')}</p>`}
+            </section>
+            <section class="preview-section preview-section--wide">
+              <span class="preview-section__label">Description</span>
+              ${isOwner ? `<textarea name="description" rows="3" style="margin-top:8px;">${EOD.escapeHtml(bug.description || '')}</textarea>` : `<p>${EOD.escapeHtml(bug.description || 'No description.')}</p>`}
+            </section>
+            <section class="preview-section preview-section--wide">
+              <span class="preview-section__label">Reproduce steps</span>
+              ${isOwner ? `<textarea name="steps" rows="3" style="margin-top:8px;">${EOD.escapeHtml(bug.steps || '')}</textarea>` : `<p>${EOD.escapeHtml(bug.steps || 'No steps provided.')}</p>`}
+            </section>
+            <section class="preview-section">
+              <span class="preview-section__label">Expected result</span>
+              ${isOwner ? `<textarea name="expectedResult" rows="2" style="margin-top:8px;">${EOD.escapeHtml(bug.expectedResult || '')}</textarea>` : `<p>${EOD.escapeHtml(bug.expectedResult || '—')}</p>`}
+            </section>
+            <section class="preview-section">
+              <span class="preview-section__label">Actual result</span>
+              ${isOwner ? `<textarea name="actualResult" rows="2" style="margin-top:8px;">${EOD.escapeHtml(bug.actualResult || '')}</textarea>` : `<p>${EOD.escapeHtml(bug.actualResult || '—')}</p>`}
+            </section>
+            <section class="preview-section preview-section--wide">
+              <span class="preview-section__label">Attachments</span>
+              ${renderAttachmentThumbs(bug.attachments || [])}
+            </section>
+            ${bug.clearedAt ? `
+              <section class="preview-section preview-section--wide">
+                <span class="preview-section__label">Cleared by</span>
+                <p>${EOD.escapeHtml(bug.clearedByName || bug.clearedBy || 'Unknown')} · ${EOD.formatDate(bug.clearedAt)}</p>
+              </section>
+            ` : ''}
+          </div>
+        </div>
+
+        <div class="button-row report-modal-actions">
+          <button class="button-primary" type="submit">Save changes</button>
+          <button class="button-ghost" type="button" data-clear-bug>${bug.clearedAt ? 'Already cleared' : 'Clear from inbox'}</button>
+        </div>
+      </form>
+    `;
+
+    EOD.openModal({
+      label: 'Bug details',
+      title: bug.title || 'Bug',
+      subtitle: 'Review repro details and clear the issue once it is handled.',
+      wide: true,
+      body
+    });
+
+    const form = EOD.qs('[data-bug-detail-form]');
+    const clearButton = EOD.qs('[data-clear-bug]');
+
+    clearButton?.addEventListener('click', () => {
+      if (bug.clearedAt) return;
+      EOD.clearBugInbox(bug.id);
+      EOD.notify('Bug cleared from the inbox.', 'success', 'Bug');
+      EOD.closeModal();
+      EOD.renderCurrentPage && EOD.renderCurrentPage();
+    });
+
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const data = Object.fromEntries(new FormData(form).entries());
+      const patch = {
+        severity: String(data.severity || bug.severity)
+      };
+      if (isOwner) {
+        if ('title' in data) patch.title = String(data.title);
+        if ('description' in data) patch.description = String(data.description);
+        if ('steps' in data) patch.steps = String(data.steps);
+        if ('expectedResult' in data) patch.expectedResult = String(data.expectedResult);
+        if ('actualResult' in data) patch.actualResult = String(data.actualResult);
+        if ('affectedUrl' in data) patch.affectedUrl = String(data.affectedUrl);
+        if ('browser' in data) patch.browser = String(data.browser);
+      }
+      EOD.updateBug(bug.id, patch);
+      EOD.notify('Bug updated.', 'success', 'Bug');
+      EOD.closeModal();
+      EOD.renderCurrentPage && EOD.renderCurrentPage();
+    });
+  }
+
   function bugCard(bug) {
     return `
       <article class="bug-item fade-up">
@@ -210,10 +345,9 @@
             <div class="workspace-header-block">
               <span class="badge-tag">Issue Tracking</span>
               <h2 class="workspace-title">System Error Logs</h2>
-              <p class="workspace-description">Monitor unresolved platform defects, high-priority bugs, and open tickets.</p>
+              <p class="workspace-description">Log and review platform defects. Attach screenshots and repro details from the editor.</p>
               <div class="hero-actions" style="margin-top:18px;">
                 <button class="button-primary" type="button" data-open-bug-modal>New bug</button>
-                <button class="button-soft" type="button" data-open-search>Search bugs</button>
               </div>
             </div>
             <div class="premium-glass-card hero-aside">
@@ -234,29 +368,18 @@
           </div>
         </section>
 
-        <section class="bugs-layout">
-          <article class="list-card">
-            <div class="section-heading"><div><h3>Bug form</h3><p>Capture the details needed for review.</p></div></div>
-            <button class="button-soft" type="button" data-open-bug-modal>Open full bug form</button>
-            <div class="stack" style="margin-top:14px;">
-              <div class="timeline-item"><div class="timeline-dot"></div><div><strong>Severity badges</strong><p>Priority stays easy to scan.</p></div></div>
-              <div class="timeline-item"><div class="timeline-dot"></div><div><strong>Clipboard paste</strong><p>Paste a screenshot directly from your clipboard.</p></div></div>
-              <div class="timeline-item"><div class="timeline-dot"></div><div><strong>Drag and drop</strong><p>Preview files before they are stored locally.</p></div></div>
+        <section class="list-card bugs-workspace">
+          <div class="section-heading">
+            <div>
+              <h3>Tracked issues</h3>
+              <p>Filter and review open bugs across the team.</p>
             </div>
-          </article>
-
-          <aside class="list-card">
-            <div class="section-heading"><div><h3>Bug feed</h3><p>Latest issues in a filterable list.</p></div></div>
-            <label class="search-field" style="width:100%;"><span aria-hidden="true">⌕</span><input data-bug-query placeholder="Search by title, browser, URL, or reporter"></label>
-            <div class="feed-filters">
-              <select class="field" data-bug-severity><option value="">All severities</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="critical">Critical</option></select>
-              <select class="field" data-bug-priority><option value="">All priorities</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="critical">Critical</option></select>
-            </div>
-          </aside>
-        </section>
-
-        <section class="list-card">
-          <div class="section-heading"><div><h3>Filtered issues</h3><p>One list for QA, developers, and managers.</p></div></div>
+          </div>
+          <label class="search-field bugs-workspace__filter"><span aria-hidden="true">⌕</span><input data-bug-query placeholder="Search by title, browser, URL, or reporter"></label>
+          <div class="feed-filters bugs-workspace__filters">
+            <select class="field" data-bug-severity><option value="">All severities</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="critical">Critical</option></select>
+            <select class="field" data-bug-priority><option value="">All priorities</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="critical">Critical</option></select>
+          </div>
           <div class="bug-list" data-bug-list></div>
         </section>
       </div>
@@ -269,16 +392,17 @@
 
     function render() {
       const items = EOD.filterBugs(bugs, { query: query.value, severity: severity.value, priority: priority.value });
-      list.innerHTML = items.length ? items.map(bugCard).join('') : `<div class="empty-state archive-empty"><div class="empty-state__icon">${ICONS.bug}</div><strong>No bugs found for the selected filters.</strong><span>Try a broader search.</span></div>`;
+      const hasFilters = query.value.trim() || severity.value || priority.value;
+      list.innerHTML = items.length ? items.map(bugCard).join('') : `<div class="empty-state archive-empty"><div class="empty-state__icon">${ICONS.bug}</div><strong>${hasFilters ? 'No bugs match your filters' : 'No bugs yet'}</strong><span>${hasFilters ? 'Try a broader search.' : 'Log your first issue to start tracking defects.'}</span>${!hasFilters ? '<button class="button-soft" type="button" data-open-bug-modal style="margin-top:14px;">New bug</button>' : ''}</div>`;
     }
 
     [query, severity, priority].forEach((node) => node.addEventListener('input', render));
     render();
     EOD.qs('[data-open-bug-modal]')?.addEventListener('click', () => openBugModal());
-    EOD.qs('[data-open-search]')?.addEventListener('click', EOD.openSearch);
   }
 
   EOD.openBugModal = openBugModal;
+  EOD.openBugDetail = openBugDetail;
   EOD.initBugsPage = function (root) {
     if (!root) return;
     EOD.setPageMeta('Bugs', 'Report and review product issues.');

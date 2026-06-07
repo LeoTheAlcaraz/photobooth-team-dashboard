@@ -29,54 +29,174 @@
 
   function renderReportPreview(payload) {
     return `
-      <div class="preview-body markdown">
-        <div class="meta-row">
-          <span class="pill">${EOD.escapeHtml(payload.date || EOD.formatDate(new Date()))}</span>
-          <span class="role-pill">${EOD.escapeHtml(payload.role || 'Role')}</span>
-          <span class="priority-pill is-${String(payload.priority || 'medium').toLowerCase()}">${EOD.escapeHtml(payload.priority || 'medium')}</span>
+      <div class="preview-body report-preview-content">
+        <div class="preview-header-card">
+          <div class="preview-header-card__meta">
+            <span class="pill">${EOD.escapeHtml(payload.date || EOD.formatDate(new Date()))}</span>
+            <span class="role-pill">${EOD.escapeHtml(payload.role || 'Role')}</span>
+            <span class="priority-pill is-${String(payload.priority || 'medium').toLowerCase()}">${EOD.escapeHtml(payload.priority || 'medium')}</span>
+          </div>
+          <h3>${EOD.escapeHtml(payload.project || 'Untitled project')}</h3>
+          <p>${EOD.escapeHtml(payload.employee || 'User')} · ${EOD.escapeHtml(payload.status || 'in progress')}</p>
         </div>
-        <h3>${EOD.escapeHtml(payload.project || 'Untitled project')}</h3>
-        <p><strong>Accomplishments</strong><br>${EOD.escapeHtml(payload.accomplishments || 'No accomplishments entered yet.')}</p>
-        <p><strong>In progress</strong><br>${EOD.escapeHtml(payload.inProgress || 'No in progress notes entered yet.')}</p>
-        <p><strong>Deployment updates</strong><br>${EOD.escapeHtml(payload.deploymentUpdates || 'No deployment updates entered yet.')}</p>
-        <p><strong>Tomorrow</strong><br>${EOD.escapeHtml(payload.tomorrowPlan || 'TBD')}</p>
+
+        <div class="preview-section-grid">
+          <section class="preview-section">
+            <span class="preview-section__label">Accomplishments</span>
+            <p>${EOD.escapeHtml(payload.accomplishments || 'No accomplishments entered yet.')}</p>
+          </section>
+          <section class="preview-section">
+            <span class="preview-section__label">In progress</span>
+            <p>${EOD.escapeHtml(payload.inProgress || 'No in progress notes entered yet.')}</p>
+          </section>
+          <section class="preview-section">
+            <span class="preview-section__label">Deployment updates</span>
+            <p>${EOD.escapeHtml(payload.deploymentUpdates || 'No deployment updates entered yet.')}</p>
+          </section>
+          <section class="preview-section">
+            <span class="preview-section__label">Tomorrow</span>
+            <p>${EOD.escapeHtml(payload.tomorrowPlan || 'TBD')}</p>
+          </section>
+        </div>
       </div>
     `;
   }
 
-  function renderDraftSummary(payload) {
-    const fields = [
-      { label: 'Project', raw: payload.project, value: payload.project || 'Untitled project' },
-      { label: 'Employee', raw: payload.employee, value: payload.employee || 'User' },
-      { label: 'Role', raw: payload.role, value: payload.role || 'Role' },
-      { label: 'Priority', raw: payload.priority, value: payload.priority || 'medium' }
-    ];
-    const filled = fields.filter((field) => String(field.raw || '').trim()).length;
-    return `
-      <div class="preview-summary">
-        <div class="preview-summary__top">
+  function reportStatusOptions(status) {
+    return ['completed', 'in progress', 'blocked', 'delayed'].map((item) => `<option value="${item}" ${String(status || 'in progress') === item ? 'selected' : ''}>${item}</option>`).join('');
+  }
+
+  function reportPriorityOptions(priority) {
+    return ['low', 'medium', 'high', 'urgent'].map((item) => `<option value="${item}" ${String(priority || 'medium') === item ? 'selected' : ''}>${item.charAt(0).toUpperCase() + item.slice(1)}</option>`).join('');
+  }
+
+  function openReportDetail(reportOrId) {
+    const report = typeof reportOrId === 'object' ? reportOrId : EOD.getReportById(reportOrId);
+    if (!report) {
+      EOD.notify('That report could not be found.', 'warning', 'Report');
+      return;
+    }
+
+    const session = EOD.getSession ? EOD.getSession() : {};
+    const sessionUser = String(session.username || session.displayName || '').toLowerCase().trim();
+    const itemOwner = String(report.employee || '').toLowerCase().trim();
+    const isOwner = sessionUser && (itemOwner.includes(sessionUser) || sessionUser.includes(itemOwner));
+
+    const body = EOD.createElement('div', 'stack');
+    body.innerHTML = `
+      <form class="stack" data-report-detail-form>
+        <div class="draft-strip">
           <div>
-            <strong>Draft summary</strong>
-            <p>${filled}/4 key fields set</p>
+            <strong>${EOD.escapeHtml(report.employee || 'User')}</strong>
+            <div class="helper">${EOD.escapeHtml(report.project || 'Untitled project')} · ${EOD.escapeHtml(report.role || 'Role')}</div>
           </div>
-          <span class="pill">Autosaved</span>
+          <span class="pill">${EOD.formatDate(report.date || report.createdAt)}</span>
         </div>
-        <div class="preview-summary__grid">
-          ${fields.map((field) => `
-            <div class="preview-summary__item">
-              <span>${EOD.escapeHtml(field.label)}</span>
-              <strong>${EOD.escapeHtml(field.value)}</strong>
+
+        <div class="mini-grid">
+          <label class="field"><span>Status</span><select name="status">${reportStatusOptions(report.status)}</select></label>
+          <label class="field"><span>Priority</span><select name="priority">${reportPriorityOptions(report.priority)}</select></label>
+        </div>
+
+        <div class="preview-body report-preview-content">
+          <div class="preview-header-card">
+            <div class="preview-header-card__meta">
+              <span class="pill">${EOD.formatDate(report.date || report.createdAt)}</span>
+              <span class="role-pill">${EOD.escapeHtml(report.role || 'Role')}</span>
+              <span class="priority-pill is-${String(report.priority || 'medium').toLowerCase()}">${EOD.escapeHtml(report.priority || 'medium')}</span>
             </div>
-          `).join('')}
+            <h3>${EOD.escapeHtml(report.project || 'Report')}</h3>
+            <p>${EOD.escapeHtml(report.employee || 'User')} · ${EOD.escapeHtml(report.status || 'in progress')}</p>
+          </div>
+
+          <div class="preview-section-grid">
+            <section class="preview-section">
+              <span class="preview-section__label">Accomplishments</span>
+              ${isOwner ? `<textarea name="accomplishments" rows="3" style="margin-top:8px;">${EOD.escapeHtml(report.accomplishments || '')}</textarea>` : `<p>${EOD.escapeHtml(report.accomplishments || 'No accomplishments entered yet.')}</p>`}
+            </section>
+            <section class="preview-section">
+              <span class="preview-section__label">In progress</span>
+              ${isOwner ? `<textarea name="inProgress" rows="3" style="margin-top:8px;">${EOD.escapeHtml(report.inProgress || '')}</textarea>` : `<p>${EOD.escapeHtml(report.inProgress || 'No in progress notes entered yet.')}</p>`}
+            </section>
+            <section class="preview-section">
+              <span class="preview-section__label">Deployment updates</span>
+              ${isOwner ? `<textarea name="deploymentUpdates" rows="3" style="margin-top:8px;">${EOD.escapeHtml(report.deploymentUpdates || '')}</textarea>` : `<p>${EOD.escapeHtml(report.deploymentUpdates || 'No deployment updates entered yet.')}</p>`}
+            </section>
+            <section class="preview-section">
+              <span class="preview-section__label">Tomorrow</span>
+              ${isOwner ? `<textarea name="tomorrowPlan" rows="3" style="margin-top:8px;">${EOD.escapeHtml(report.tomorrowPlan || '')}</textarea>` : `<p>${EOD.escapeHtml(report.tomorrowPlan || 'TBD')}</p>`}
+            </section>
+            <section class="preview-section preview-section--wide">
+              <span class="preview-section__label">URLs</span>
+              ${isOwner ? `<input name="urls" value="${EOD.escapeHtml(report.urls || '')}" style="margin-top:8px;">` : `<p>${EOD.escapeHtml(report.urls || 'None')}</p>`}
+            </section>
+            ${report.clearedAt ? `
+              <section class="preview-section preview-section--wide">
+                <span class="preview-section__label">Cleared by</span>
+                <p>${EOD.escapeHtml(report.clearedByName || report.clearedBy || 'Unknown')} · ${EOD.formatDate(report.clearedAt)}</p>
+              </section>
+            ` : ''}
+          </div>
         </div>
-      </div>
+
+          <div class="button-row report-modal-actions">
+          <button class="button-primary" type="submit">Save changes</button>
+          <button class="button-ghost" type="button" data-clear-report>${report.clearedAt ? 'Already cleared' : 'Clear from inbox'}</button>
+        </div>
+      </form>
     `;
+
+    EOD.openModal({
+      label: 'Report details',
+      title: report.project || 'Report',
+      subtitle: 'Edit status and priority, then clear it when the team is done reviewing.',
+      wide: true,
+      body
+    });
+
+    const form = EOD.qs('[data-report-detail-form]');
+    const clearButton = EOD.qs('[data-clear-report]');
+
+    clearButton?.addEventListener('click', () => {
+      if (report.clearedAt) return;
+      EOD.clearReportInbox(report.id);
+      EOD.notify('Report cleared from the inbox.', 'success', 'Report');
+      EOD.closeModal();
+      EOD.renderCurrentPage && EOD.renderCurrentPage();
+    });
+
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const data = Object.fromEntries(new FormData(form).entries());
+      const patch = {
+        status: String(data.status || report.status),
+        priority: String(data.priority || report.priority)
+      };
+      if (isOwner) {
+        if ('accomplishments' in data) patch.accomplishments = String(data.accomplishments);
+        if ('inProgress' in data) patch.inProgress = String(data.inProgress);
+        if ('deploymentUpdates' in data) patch.deploymentUpdates = String(data.deploymentUpdates);
+        if ('tomorrowPlan' in data) patch.tomorrowPlan = String(data.tomorrowPlan);
+        if ('urls' in data) patch.urls = String(data.urls);
+      }
+      EOD.updateReport(report.id, patch);
+      EOD.notify('Report updated.', 'success', 'Report');
+      EOD.closeModal();
+      EOD.renderCurrentPage && EOD.renderCurrentPage();
+    });
   }
 
   function renderReportsList(root, reports, query = '') {
+    const session = EOD.getSession ? EOD.getSession() : {};
+    const sessionUser = String(session.username || session.displayName || '').toLowerCase().trim();
+
     const filtered = EOD.filterReports(reports, { query });
-    root.innerHTML = filtered.length ? filtered.map((item) => `
-      <article class="report-item fade-up">
+    root.innerHTML = filtered.length ? filtered.map((item) => {
+      const itemOwner = String(item.employee || '').toLowerCase().trim();
+      const isOwner = sessionUser && (itemOwner.includes(sessionUser) || sessionUser.includes(itemOwner));
+      
+      return `
+      <article class="report-item fade-up" data-open-report-detail="${EOD.escapeHtml(item.id)}" role="button" tabindex="0">
         <div class="report-item__top">
           <div>
             <strong>${EOD.escapeHtml(item.employee)}</strong>
@@ -85,13 +205,29 @@
           <span class="status-pill ${String(item.status).includes('blocked') ? 'is-blocked' : ''}">${EOD.escapeHtml(item.status)}</span>
         </div>
         <p>${EOD.escapeHtml(item.accomplishments)}</p>
-        <div class="meta-row">
+        <div class="meta-row" style="margin-top:14px;">
           <span class="priority-pill is-${String(item.priority).toLowerCase()}">${EOD.escapeHtml(item.priority)}</span>
-          <span class="pill">${EOD.escapeHtml(item.project)}</span>
-          <span class="pill">${EOD.escapeHtml(item.urls)}</span>
+          ${item.urls ? `<span class="pill">${EOD.escapeHtml(item.urls)}</span>` : ''}
+          ${item.clearedAt ? `<span class="pill">Cleared by ${EOD.escapeHtml(item.clearedByName || item.clearedBy || 'Team')}</span>` : ''}
+          <div style="flex-grow:1;"></div>
+          <button class="button-ghost" type="button" data-open-report-detail="${EOD.escapeHtml(item.id)}">Open</button>
+          ${isOwner ? `<button class="button-soft" type="button" data-action-delete="${EOD.escapeHtml(item.id)}">Delete</button>` : ''}
         </div>
       </article>
-    `).join('') : `<div class="empty-state archive-empty"><div class="empty-state__icon">${ICONS.report}</div><strong>No reports yet</strong><span>Saved reports will appear here after submission.</span></div>`;
+      `;
+    }).join('') : `<div class="empty-state archive-empty"><div class="empty-state__icon">${ICONS.report}</div><strong>${query.trim() ? 'No reports match your filter' : 'No reports yet'}</strong><span>${query.trim() ? 'Try a different search term.' : 'Submit your first standup update to start the history.'}</span>${!query.trim() ? '<button class="button-soft" type="button" data-open-report-modal style="margin-top:14px;">New report</button>' : ''}</div>`;
+  }
+
+  function applyEodTemplateToForm(form, updatePreview) {
+    if (!form || !EOD.getEodTemplate) return;
+    const template = EOD.getEodTemplate();
+    const fields = ['date', 'accomplishments', 'inProgress', 'deploymentUpdates', 'tomorrowPlan', 'priority', 'status'];
+    fields.forEach((name) => {
+      const input = form.elements[name];
+      if (input && name in template) input.value = template[name];
+    });
+    updatePreview();
+    EOD.notify('EOD template applied to accomplishments.', 'brand', 'Template');
   }
 
   function openReportModal(prefill) {
@@ -106,9 +242,9 @@
       status: 'in progress'
     }, draft);
 
-    const body = EOD.createElement('div', 'report-layout');
+    const body = EOD.createElement('div');
     body.innerHTML = `
-      <form class="stack" data-report-form>
+      <form class="stack" data-report-form style="max-width: 680px; margin: 0 auto; width: 100%;">
         <div class="draft-strip">
           <div>
             <strong>Autosave on</strong>
@@ -126,25 +262,23 @@
           <label class="field"><span>Priority</span><select name="priority"><option value="low" ${payload.priority === 'low' ? 'selected' : ''}>Low</option><option value="medium" ${payload.priority === 'medium' ? 'selected' : ''}>Medium</option><option value="high" ${payload.priority === 'high' ? 'selected' : ''}>High</option><option value="urgent" ${payload.priority === 'urgent' ? 'selected' : ''}>Urgent</option></select></label>
         </div>
 
-        <label class="field"><span>Accomplishments <span class="character-count" data-count-accomplishments>0</span></span><textarea name="accomplishments" data-preview-source="accomplishments" maxlength="1800">${EOD.escapeHtml(payload.accomplishments || '')}</textarea><span class="helper">Keep it concrete and readable.</span></label>
-        <label class="field"><span>In progress <span class="character-count" data-count-inProgress>0</span></span><textarea name="inProgress" data-preview-source="inProgress" maxlength="1200">${EOD.escapeHtml(payload.inProgress || '')}</textarea></label>
-        <label class="field"><span>Deployment updates</span><textarea name="deploymentUpdates" data-preview-source="deploymentUpdates" maxlength="1200">${EOD.escapeHtml(payload.deploymentUpdates || '')}</textarea></label>
-        <label class="field"><span>URLs worked on</span><input name="urls" value="${EOD.escapeHtml(payload.urls || '')}" placeholder="dashboard.html, reports.html"></label>
-        <label class="field"><span>Tomorrow plan</span><textarea name="tomorrowPlan" data-preview-source="tomorrowPlan" maxlength="1200">${EOD.escapeHtml(payload.tomorrowPlan || '')}</textarea></label>
+        <div class="section-heading" style="margin-top:24px;"><div><h4 style="margin:0;">Progress Update</h4></div></div>
 
-        <div class="button-row">
+        <label class="field"><span>Accomplishments <span class="character-count" data-count-accomplishments>0</span></span><textarea name="accomplishments" data-preview-source="accomplishments" maxlength="1800" rows="5">${EOD.escapeHtml(payload.accomplishments || '')}</textarea><span class="helper">Keep it concrete and readable.</span></label>
+        <label class="field"><span>In progress <span class="character-count" data-count-inProgress>0</span></span><textarea name="inProgress" data-preview-source="inProgress" maxlength="1200" rows="3">${EOD.escapeHtml(payload.inProgress || '')}</textarea></label>
+        
+        <div class="section-heading" style="margin-top:24px;"><div><h4 style="margin:0;">Additional Details</h4></div></div>
+
+        <label class="field"><span>Deployment updates</span><textarea name="deploymentUpdates" data-preview-source="deploymentUpdates" maxlength="1200" rows="2">${EOD.escapeHtml(payload.deploymentUpdates || '')}</textarea></label>
+        <label class="field"><span>URLs worked on</span><input name="urls" value="${EOD.escapeHtml(payload.urls || '')}" placeholder="dashboard.html, reports.html"></label>
+        <label class="field"><span>Tomorrow plan</span><textarea name="tomorrowPlan" data-preview-source="tomorrowPlan" maxlength="1200" rows="2">${EOD.escapeHtml(payload.tomorrowPlan || '')}</textarea></label>
+
+        <div class="button-row report-modal-actions" style="margin-top:32px;">
           <button type="submit" class="button-primary">Save report</button>
+          <button type="button" class="button-ghost" data-apply-eod-template>Use EOD template</button>
           <button type="button" class="button-ghost" data-clear-draft>Clear draft</button>
         </div>
       </form>
-
-      <aside class="preview-panel card">
-        <div class="section-heading"><div><h3>Live preview</h3><p>Matches the submitted report card.</p></div></div>
-        <div class="stack">
-          ${renderDraftSummary(payload)}
-          <div data-report-preview>${renderReportPreview(payload)}</div>
-        </div>
-      </aside>
     `;
 
     EOD.openModal({
@@ -157,11 +291,9 @@
 
     const modal = EOD.qs('.modal__panel');
     const form = EOD.qs('[data-report-form]');
-    const preview = EOD.qs('[data-report-preview]');
 
     function updatePreview() {
       const data = formData(form);
-      preview.innerHTML = renderReportPreview(data);
       EOD.qsa('[data-preview-source]', form).forEach((field) => {
         const count = EOD.qs(`[data-count-${field.name}]`, form);
         if (count) count.textContent = `${String(field.value || '').length}/${field.getAttribute('maxlength') || '∞'}`;
@@ -178,6 +310,10 @@
       form.reset();
       updatePreview();
       EOD.notify('Draft cleared.', 'brand', 'Report draft');
+    });
+
+    EOD.qs('[data-apply-eod-template]', form)?.addEventListener('click', () => {
+      applyEodTemplateToForm(form, updatePreview);
     });
 
     form.addEventListener('submit', (event) => {
@@ -207,10 +343,9 @@
             <div class="workspace-header-block">
               <span class="badge-tag">Logs &amp; Updates</span>
               <h2 class="workspace-title">Daily Standup Reports</h2>
-              <p class="workspace-description">Track team progress logs, continuous documentation, and day-to-day standups.</p>
+              <p class="workspace-description">Write and review daily standup updates. Drafts autosave while you edit.</p>
               <div class="hero-actions" style="margin-top:18px;">
                 <button class="button-primary" type="button" data-open-report-modal>New report</button>
-                <button class="button-soft" type="button" data-open-search>Search history</button>
               </div>
             </div>
             <div class="premium-glass-card hero-aside">
@@ -231,32 +366,14 @@
           </div>
         </section>
 
-        <section class="report-layout">
-          <article class="list-card">
-            <div class="section-heading"><div><h3>Report form</h3><p>Enter the current day’s update.</p></div></div>
-            <button class="button-soft" type="button" data-open-report-modal>Open full editor</button>
-            <div class="stack" style="margin-top:14px;">
-              <div class="draft-strip"><div><strong>Autosave draft</strong><div class="helper">Saved locally while you work.</div></div><span class="pill">Live draft</span></div>
-              <div class="report-timeline">
-                <div class="timeline-item"><div class="timeline-dot"></div><div><strong>Submission checklist</strong><p>Accomplishments, in progress notes, deployment updates, and tomorrow’s plan.</p></div></div>
-                <div class="timeline-item"><div class="timeline-dot"></div><div><strong>Preview</strong><p>The preview panel stays synced to the current draft.</p></div></div>
-                <div class="timeline-item"><div class="timeline-dot"></div><div><strong>Validation</strong><p>Employee, project, and accomplishments are required.</p></div></div>
-              </div>
+        <section class="list-card reports-workspace">
+          <div class="section-heading">
+            <div>
+              <h3>Report history</h3>
+              <p>Search and open past standup submissions from your team.</p>
             </div>
-          </article>
-
-          <aside class="report-preview list-card">
-            <div class="section-heading"><div><h3>Draft preview</h3><p>Current draft snapshot.</p></div></div>
-            <div class="stack">
-              ${renderDraftSummary(draft || {})}
-              <div class="preview-body markdown">${draft ? renderReportPreview(draft) : '<p class="subtle">Open the editor to start a draft.</p>'}</div>
-            </div>
-          </aside>
-        </section>
-
-        <section class="list-card">
-          <div class="section-heading"><div><h3>Recent reports</h3><p>Searchable history of updates.</p></div></div>
-          <label class="search-field" style="width:min(560px,100%);"><span aria-hidden="true">⌕</span><input data-report-query placeholder="Filter reports by employee, project, update, or status"></label>
+          </div>
+          <label class="search-field reports-workspace__filter"><span aria-hidden="true">⌕</span><input data-report-query placeholder="Filter by employee, project, update, or status"></label>
           <div class="report-list" data-report-list></div>
         </section>
       </div>
@@ -267,10 +384,40 @@
     renderReportsList(list, reports, '');
     queryInput?.addEventListener('input', () => renderReportsList(list, reports, queryInput.value));
     EOD.qs('[data-open-report-modal]')?.addEventListener('click', () => openReportModal());
-    EOD.qs('[data-open-search]')?.addEventListener('click', EOD.openSearch);
+
+    root.addEventListener('click', (event) => {
+      const delBtn = event.target.closest('[data-action-delete]');
+      if (delBtn) {
+        event.stopPropagation();
+        const id = delBtn.getAttribute('data-action-delete');
+        if (id && confirm('Are you sure you want to permanently delete this item?')) {
+          if (id.startsWith('rep-') && EOD.deleteReport) {
+            EOD.deleteReport(id);
+            EOD.notify('Report permanently deleted.', 'brand', 'Deleted');
+            EOD.renderCurrentPage && EOD.renderCurrentPage();
+          }
+        }
+        return;
+      }
+      
+      const detail = event.target.closest('[data-open-report-detail]');
+      if (!detail) return;
+      const id = detail.getAttribute('data-open-report-detail');
+      if (id) openReportDetail(id);
+    });
+
+    root.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      const card = event.target.closest('[data-open-report-detail]');
+      if (!card) return;
+      event.preventDefault();
+      const id = card.getAttribute('data-open-report-detail');
+      if (id) openReportDetail(id);
+    });
   }
 
   EOD.openReportModal = openReportModal;
+  EOD.openReportDetail = openReportDetail;
   EOD.initReportsPage = function (root) {
     if (!root) return;
     EOD.setPageMeta('Reports', 'Compose and review daily updates.');

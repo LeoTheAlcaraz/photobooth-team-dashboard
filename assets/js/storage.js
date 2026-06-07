@@ -34,6 +34,47 @@
     localStorage.setItem(storageKey, JSON.stringify(value));
   }
 
+  function currentActor() {
+    const session = EOD.getSession ? EOD.getSession() : {};
+    return {
+      id: String(session.accountId || session.username || 'anonymous'),
+      name: String(session.displayName || session.username || (EOD.getSettings && EOD.getSettings().profile.displayName) || 'User')
+    };
+  }
+
+  function syncFirestoreDoc(collectionName, id, data) {
+    try {
+      const db = window.firebaseDb;
+      if (!db || !collectionName || !id) return;
+      db.collection(collectionName).doc(id).set(Object.assign({}, data), { merge: true }).catch(() => {});
+    } catch (error) {}
+  }
+
+  function purgeFirestoreBySourceId(sourceId) {
+    try {
+      const db = window.firebaseDb;
+      if (!db || !sourceId) return;
+      ['notifications', 'activity'].forEach((collectionName) => {
+        db.collection(collectionName).where('sourceId', '==', sourceId).get()
+          .then((snap) => {
+            if (snap.empty) return;
+            const batch = db.batch();
+            snap.forEach((doc) => batch.delete(doc.ref));
+            return batch.commit();
+          })
+          .catch(() => {});
+      });
+    } catch (error) {}
+  }
+
+  function formatShortDate(d) {
+    const date = d ? new Date(d) : new Date();
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    const yy = String(date.getFullYear()).slice(-2);
+    return `${mm} ${dd} ${yy}`;
+  }
+
   function seedState() {
     return {
       revision: 0,
@@ -380,19 +421,13 @@
       id: `note-${Date.now()}`,
       createdAt: new Date().toISOString(),
       readAt: '',
+      clearedAt: '',
       audience: 'all'
     }, notification);
     EOD.state.notifications.unshift(item);
     EOD.state.notifications = EOD.state.notifications.slice(0, 50);
     // Persist notification to Firestore if available
-    try {
-      const db = window.firebaseDb;
-      if (db) {
-        const data = Object.assign({}, item);
-        data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-        db.collection('notifications').doc(item.id).set(data).catch(() => {});
-      }
-    } catch (e) {}
+    syncFirestoreDoc('notifications', item.id, item);
     return item;
   }
 
@@ -401,15 +436,18 @@
     const item = Object.assign({ id: `rep-${Date.now()}`, createdAt: new Date().toISOString() }, report);
     // Local optimistic update
     EOD.state.reports.unshift(item);
-    EOD.state.activity.unshift({
+    const activityItem = {
       id: `act-${Date.now()}`,
       type: 'report',
+      sourceId: item.id,
       title: `${item.employee} submitted ${item.status} report`,
       body: item.accomplishments,
       role: item.role,
       priority: item.priority,
       createdAt: item.createdAt
-    });
+    };
+    EOD.state.activity.unshift(activityItem);
+    syncFirestoreDoc('activity', activityItem.id, activityItem);
     queueNotification({
       kind: 'report',
       title: `${item.employee} posted a report`,
@@ -439,16 +477,19 @@
     const item = Object.assign({ id: `bug-${Date.now()}`, createdAt: new Date().toISOString() }, bug);
     // Local optimistic update
     EOD.state.bugs.unshift(item);
-    EOD.state.activity.unshift({
+    const activityItem = {
       id: `act-${Date.now()}`,
       type: 'bug',
+      sourceId: item.id,
       title: bug.title,
       body: bug.description,
       role: bug.role,
       priority: bug.priority,
       severity: bug.severity,
       createdAt: item.createdAt
-    });
+    };
+    EOD.state.activity.unshift(activityItem);
+    syncFirestoreDoc('activity', activityItem.id, activityItem);
     queueNotification({
       kind: 'bug',
       title: `${item.title}`,
@@ -460,16 +501,321 @@
     EOD.saveState('bug-added', { id: item.id });
 
     // Persist to Firestore if available
+    syncFirestoreDoc('bugs', item.id, item);
+
+    return item;
+  };
+
+  EOD.getReportById = function (id) {
+    return EOD.getReports().find((report) => String(report.id) === String(id || '')) || null;
+  };
+
+  EOD.getBugById = function (id) {
+    return EOD.getBugs().find((bug) => String(bug.id) === String(id || '')) || null;
+  };
+
+  EOD.getEodTemplate = function () {
+    const date = formatShortDate(new Date());
+    const body = `EOD SUMMARY | ${date}\n\nDone:\n- \n- \n\nIn Progress / Updates:\n- \n- \n\nIssues Encountered (if any):\n- \n`;
+    return {
+      date: new Date().toISOString().slice(0, 10),
+      accomplishments: body,
+      inProgress: '',
+      deploymentUpdates: '',
+      tomorrowPlan: '',
+      priority: 'medium',
+      status: 'in progress'
+    };
+  };
+
+  EOD.sendEodReminder = function (opts) {
+    EOD.initStorage();
+    const actor = currentActor();
+    const date = formatShortDate(new Date());
+    const title = 'EOD Reminder';
+    const body = `Good morning team!\n\nPlease submit your EOD SUMMARY for ${date} in the Reports section.\n\nFormat:\nEOD SUMMARY | ${date}\n\nDone:\n- *add task here*\n\nIn Progress / Updates:\n- *add task here*\n\nIssues Encountered (if any):\n- *add notes here*\n\nPM ${actor.name} for account details.`;
+    const notification = EOD.pushNotification({
+      kind: 'eod-reminder',
+      title,
+      body,
+      audience: 'all',
+      link: 'reports.html'
+    });
+    EOD.browserNotify && EOD.browserNotify(title, `Please submit your EOD for ${date}`);
+    return notification;
+  };
+
+  EOD.openEodReport = function () {
+    if (!EOD.openReportModal) return EOD.notify('Report editor not available.', 'warning', 'EOD');
+    const template = EOD.getEodTemplate();
+    EOD.openReportModal(Object.assign({}, template));
+  };
+
+  EOD.openNotification = function (id) {
+    EOD.initStorage();
+    const note = EOD.state.notifications.find((item) => String(item.id) === String(id || ''));
+    if (!note) {
+      EOD.notify('Notification not found.', 'warning', 'Inbox');
+      return null;
+    }
+    const body = EOD.createElement('div', 'notification-modal');
+    body.innerHTML = `
+      <div class="stack">
+        <div>
+          <strong>${EOD.escapeHtml(note.title)}</strong>
+          <p class="subtle" style="margin:8px 0 0; white-space:pre-line;">${EOD.escapeHtml(note.body)}</p>
+        </div>
+        <div class="button-row" style="margin:0; justify-content:flex-end;">
+          ${note.link === 'reports.html' ? '<button class="button-primary" type="button" data-fill-eod>Fill EOD Report Now</button>' : ''}
+          <button class="button-ghost" type="button" data-copy-note>Copy</button>
+          <button class="button-soft" type="button" data-close-modal>Close</button>
+        </div>
+      </div>
+    `;
+
+    const modal = EOD.openModal({
+      label: 'Inbox item',
+      title: note.title,
+      subtitle: note.kind || 'Notification',
+      wide: true,
+      body
+    });
+
+    modal.querySelector('[data-fill-eod]')?.addEventListener('click', () => {
+      EOD.openEodReport && EOD.openEodReport();
+      EOD.closeModal();
+    });
+    modal.querySelector('[data-copy-note]')?.addEventListener('click', () => {
+      EOD.copyText(note.body || '');
+      EOD.notify('Copied notification text.', 'success', 'Copied');
+    });
+    return note;
+  };
+
+  EOD.updateReport = function (id, patch) {
+    EOD.initStorage();
+    const report = EOD.state.reports.find((item) => String(item.id) === String(id || ''));
+    if (!report) return null;
+    const actor = currentActor();
+    Object.assign(report, patch || {}, {
+      updatedAt: new Date().toISOString(),
+      updatedBy: actor.id,
+      updatedByName: actor.name
+    });
+    const notification = EOD.state.notifications.find((item) => String(item.sourceId) === String(report.id));
+    if (notification) {
+      notification.body = `${report.project} · ${report.status} · ${report.priority}`;
+      notification.updatedAt = report.updatedAt;
+      notification.updatedBy = actor.id;
+      notification.updatedByName = actor.name;
+    }
+    EOD.saveState('report-updated', { id: report.id, patch: Object.assign({}, patch) });
+    syncFirestoreDoc('reports', report.id, report);
+    if (notification) syncFirestoreDoc('notifications', notification.id, notification);
+    return report;
+  };
+
+  EOD.updateBug = function (id, patch) {
+    EOD.initStorage();
+    const bug = EOD.state.bugs.find((item) => String(item.id) === String(id || ''));
+    if (!bug) return null;
+    const actor = currentActor();
+    Object.assign(bug, patch || {}, {
+      updatedAt: new Date().toISOString(),
+      updatedBy: actor.id,
+      updatedByName: actor.name
+    });
+    const notification = EOD.state.notifications.find((item) => String(item.sourceId) === String(bug.id));
+    if (notification) {
+      notification.body = `${bug.severity} · ${bug.reporter} · ${bug.affectedUrl}`;
+      notification.updatedAt = bug.updatedAt;
+      notification.updatedBy = actor.id;
+      notification.updatedByName = actor.name;
+    }
+    EOD.saveState('bug-updated', { id: bug.id, patch: Object.assign({}, patch) });
+    syncFirestoreDoc('bugs', bug.id, bug);
+    if (notification) syncFirestoreDoc('notifications', notification.id, notification);
+    return bug;
+  };
+
+  EOD.deleteReport = function (id) {
+    EOD.initStorage();
+    const index = EOD.state.reports.findIndex((item) => String(item.id) === String(id || ''));
+    if (index === -1) return false;
+    EOD.state.reports.splice(index, 1);
+    
+    // Also remove notifications related to it
+    EOD.state.notifications = EOD.state.notifications.filter(n => String(n.sourceId) !== String(id));
+    // Also remove activity related to it
+    EOD.state.activity = EOD.state.activity.filter(a => String(a.sourceId) !== String(id));
+    
+    EOD.saveState('report-deleted', { id });
     try {
       const db = window.firebaseDb;
       if (db) {
-        const data = Object.assign({}, item);
-        data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-        db.collection('bugs').doc(item.id).set(data).catch(() => {});
+        db.collection('reports').doc(id).delete().catch(() => {});
       }
     } catch (e) {}
+    purgeFirestoreBySourceId(id);
+    return true;
+  };
 
-    return item;
+  EOD.deleteBug = function (id) {
+    EOD.initStorage();
+    const index = EOD.state.bugs.findIndex((item) => String(item.id) === String(id || ''));
+    if (index === -1) return false;
+    EOD.state.bugs.splice(index, 1);
+    
+    // Also remove notifications related to it
+    EOD.state.notifications = EOD.state.notifications.filter(n => String(n.sourceId) !== String(id));
+    // Also remove activity related to it
+    EOD.state.activity = EOD.state.activity.filter(a => String(a.sourceId) !== String(id));
+
+    EOD.saveState('bug-deleted', { id });
+    try {
+      const db = window.firebaseDb;
+      if (db) {
+        db.collection('bugs').doc(id).delete().catch(() => {});
+      }
+    } catch (e) {}
+    purgeFirestoreBySourceId(id);
+    return true;
+  };
+
+  EOD.clearNotification = function (id, reason) {
+    EOD.initStorage();
+    const notification = EOD.state.notifications.find((item) => String(item.id) === String(id || ''));
+    if (!notification || notification.clearedAt) return notification || null;
+    const actor = currentActor();
+    const stamp = new Date().toISOString();
+    notification.clearedAt = stamp;
+    notification.clearedBy = actor.id;
+    notification.clearedByName = actor.name;
+    notification.clearedReason = String(reason || '').trim();
+    notification.readAt = notification.readAt || stamp;
+    EOD.saveState('notification-cleared', { id: notification.id });
+    syncFirestoreDoc('notifications', notification.id, notification);
+    return notification;
+  };
+
+  EOD.clearAllNotifications = function () {
+    EOD.initStorage();
+    const actor = currentActor();
+    const stamp = new Date().toISOString();
+    let changed = false;
+    EOD.state.notifications.forEach((notification) => {
+      if (notification.clearedAt) return;
+      notification.clearedAt = stamp;
+      notification.clearedBy = actor.id;
+      notification.clearedByName = actor.name;
+      notification.readAt = notification.readAt || stamp;
+      changed = true;
+      syncFirestoreDoc('notifications', notification.id, notification);
+    });
+    if (changed) EOD.saveState('notifications-cleared-all');
+    return EOD.getNotifications();
+  };
+
+  EOD.clearReportInbox = function (id, reason) {
+    EOD.initStorage();
+    const report = EOD.state.reports.find((item) => String(item.id) === String(id || ''));
+    if (!report) return null;
+    const actor = currentActor();
+    const stamp = new Date().toISOString();
+    report.clearedAt = stamp;
+    report.clearedBy = actor.id;
+    report.clearedByName = actor.name;
+    report.clearedReason = String(reason || '').trim();
+    report.updatedAt = stamp;
+    report.updatedBy = actor.id;
+    report.updatedByName = actor.name;
+    EOD.state.notifications.forEach((notification) => {
+      if (String(notification.sourceId) !== String(report.id)) return;
+      notification.clearedAt = stamp;
+      notification.clearedBy = actor.id;
+      notification.clearedByName = actor.name;
+      notification.clearedReason = String(reason || '').trim();
+      notification.readAt = notification.readAt || stamp;
+      syncFirestoreDoc('notifications', notification.id, notification);
+    });
+    EOD.saveState('report-cleared', { id: report.id });
+    syncFirestoreDoc('reports', report.id, report);
+    return report;
+  };
+
+  EOD.clearBugInbox = function (id, reason) {
+    EOD.initStorage();
+    const bug = EOD.state.bugs.find((item) => String(item.id) === String(id || ''));
+    if (!bug) return null;
+    const actor = currentActor();
+    const stamp = new Date().toISOString();
+    bug.clearedAt = stamp;
+    bug.clearedBy = actor.id;
+    bug.clearedByName = actor.name;
+    bug.clearedReason = String(reason || '').trim();
+    bug.updatedAt = stamp;
+    bug.updatedBy = actor.id;
+    bug.updatedByName = actor.name;
+    EOD.state.notifications.forEach((notification) => {
+      if (String(notification.sourceId) !== String(bug.id)) return;
+      notification.clearedAt = stamp;
+      notification.clearedBy = actor.id;
+      notification.clearedByName = actor.name;
+      notification.clearedReason = String(reason || '').trim();
+      notification.readAt = notification.readAt || stamp;
+      syncFirestoreDoc('notifications', notification.id, notification);
+    });
+    EOD.saveState('bug-cleared', { id: bug.id });
+    syncFirestoreDoc('bugs', bug.id, bug);
+    return bug;
+  };
+
+  EOD.unclearReportInbox = function (id) {
+    EOD.initStorage();
+    const report = EOD.state.reports.find((item) => String(item.id) === String(id || ''));
+    if (!report || !report.clearedAt) return null;
+    
+    report.clearedAt = '';
+    report.clearedBy = '';
+    report.clearedByName = '';
+    report.clearedReason = '';
+    
+    EOD.state.notifications.forEach((notification) => {
+      if (String(notification.sourceId) !== String(report.id)) return;
+      notification.clearedAt = '';
+      notification.clearedBy = '';
+      notification.clearedByName = '';
+      notification.clearedReason = '';
+      syncFirestoreDoc('notifications', notification.id, notification);
+    });
+    
+    EOD.saveState('report-uncleared', { id: report.id });
+    syncFirestoreDoc('reports', report.id, report);
+    return report;
+  };
+
+  EOD.unclearBugInbox = function (id) {
+    EOD.initStorage();
+    const bug = EOD.state.bugs.find((item) => String(item.id) === String(id || ''));
+    if (!bug || !bug.clearedAt) return null;
+    
+    bug.clearedAt = '';
+    bug.clearedBy = '';
+    bug.clearedByName = '';
+    bug.clearedReason = '';
+    
+    EOD.state.notifications.forEach((notification) => {
+      if (String(notification.sourceId) !== String(bug.id)) return;
+      notification.clearedAt = '';
+      notification.clearedBy = '';
+      notification.clearedByName = '';
+      notification.clearedReason = '';
+      syncFirestoreDoc('notifications', notification.id, notification);
+    });
+    
+    EOD.saveState('bug-uncleared', { id: bug.id });
+    syncFirestoreDoc('bugs', bug.id, bug);
+    return bug;
   };
 
   EOD.pushNotification = function (notification) {
@@ -497,7 +843,7 @@
   };
 
   EOD.getNotifications = function () {
-    return EOD.initStorage().notifications.slice();
+    return EOD.initStorage().notifications.filter((item) => !item.clearedAt).slice();
   };
 
   EOD.getUnreadNotifications = function () {

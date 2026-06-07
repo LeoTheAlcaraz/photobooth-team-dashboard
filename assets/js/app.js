@@ -13,6 +13,41 @@
     if (userAvatar) userAvatar.textContent = EOD.escapeHtml(name).slice(0, 2).toUpperCase();
   }
 
+  function openCreateReport() {
+    const page = document.body.dataset.page;
+    if (page === 'reports' && EOD.openReportModal) {
+      EOD.openReportModal();
+      return;
+    }
+    window.location.href = 'reports.html?create=report';
+  }
+
+  function openCreateBug() {
+    const page = document.body.dataset.page;
+    if (page === 'bugs' && EOD.openBugModal) {
+      EOD.openBugModal();
+      return;
+    }
+    window.location.href = 'bugs.html?create=bug';
+  }
+
+  function handleCreateIntent() {
+    const params = new URLSearchParams(window.location.search);
+    const create = params.get('create');
+    if (!create) return;
+
+    const pageFile = `${document.body.dataset.page || 'dashboard'}.html`;
+    history.replaceState(null, '', pageFile);
+
+    requestAnimationFrame(() => {
+      if (create === 'report') openCreateReport();
+      if (create === 'bug') openCreateBug();
+    });
+  }
+
+  EOD.openCreateReport = openCreateReport;
+  EOD.openCreateBug = openCreateBug;
+
   function bindShell() {
     const shell = EOD.qs('.app-shell');
     const sidebar = EOD.qs('[data-sidebar]');
@@ -82,8 +117,14 @@
       const saveSettings = event.target.closest('[data-save-settings]');
       const resetSession = event.target.closest('[data-reset-session]');
 
-      if (reportTrigger) EOD.openReportModal && EOD.openReportModal();
-      if (bugTrigger) EOD.openBugModal && EOD.openBugModal();
+      if (reportTrigger) {
+        event.preventDefault();
+        openCreateReport();
+      }
+      if (bugTrigger) {
+        event.preventDefault();
+        openCreateBug();
+      }
       if (searchTrigger) EOD.openSearch();
       if (themeTrigger && !themeToggle?.contains(event.target)) {
         const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
@@ -135,7 +176,7 @@
       }
       if ((event.key === 'n' || event.key === 'N') && !/input|textarea|select/i.test(event.target.tagName)) {
         event.preventDefault();
-        EOD.openReportModal && EOD.openReportModal();
+        openCreateReport();
       }
       if (event.key === 'Escape') {
         EOD.closeModal();
@@ -299,6 +340,7 @@
 
     EOD.setPageMeta(document.body.dataset.title || 'Workspace', document.body.dataset.subtitle || '');
     renderCurrentPage(page, root);
+    handleCreateIntent();
   }
 
   document.addEventListener('DOMContentLoaded', initApp);
